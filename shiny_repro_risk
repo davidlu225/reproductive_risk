@@ -74,10 +74,10 @@ ui <- fluidPage( theme = shinytheme("flatly"),
 # MAKE SERVER
 
 # Input data
-dat <- read_excel("/Users/David/Desktop/Maxwell/BRCA_carrier_repro_risk/ReproRiskPowers2024.xlsx", 
+dat <- read_excel("ReproRiskPowers2024.xlsx", 
                   sheet = "Data")
 
-diseases <- read_excel("/Users/David/Desktop/Maxwell/BRCA_carrier_repro_risk/ReproRiskPowers2024.xlsx", 
+diseases <- read_excel("ReproRiskPowers2024.xlsx", 
                        sheet = "Dropdowns")
 
 # Convert class character to numeric
