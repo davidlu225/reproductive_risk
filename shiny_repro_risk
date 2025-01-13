@@ -1,0 +1,165 @@
+library(readxl)
+library(shiny)
+library(DT)
+require(shinythemes)
+library(rsconnect)
+
+# Make UI 
+ui <- fluidPage( theme = shinytheme("flatly"),
+                 tags$head(tags$link(rel="shortcut icon", 
+                                    href="../assets/icons/favicon.ico", 
+                                    type="image/x-icon")),
+                 tags$head(tags$link(rel="apple-touch-icon", 
+                                    href="../assets/icons/apple-touch-icon.png", 
+                                    type="image/x-icon")),
+                 tags$script(HTML(
+                  'function myFunction() { 
+                  var txt;
+                  if (confirm("This is a mailbox for reporting website errors to programmers for the risk calculator website.  If you have questions or concerns about a specific calculator, please use the calculator Author Contact Information found on the publication for that calculator.  Each calculator is documented by a specific publication with a corresponding author.")) {
+                  window.open("mailto:rcalcsupport@ccf.org"); } }'
+                  )),
+                 titlePanel('Reproductive risks for carriers of pathogenic 
+                           variants in cancer risk genes'),
+                 sidebarLayout(
+                   sidebarPanel(id = "sidebar",
+                               selectInput('gene_name', 
+                                         'What gene does partner 1 have an alteration in?', 
+                                         choices = c("ATM", "BRCA1", "BRCA2", 
+                                                     "BRIP1", "FH", "MLH1", "MSH2",
+                                                     "MSH6", "NBN", "PALB2", "PMS2", 
+                                                     "RAD51C", "SDHA", "SDHB", "SDHD")),
+                               selectInput('ancestry', 'What is the genetic ancestry of partner 2?', 
+                                           choices = c("African", "Ashkenazi Jewish",
+                                                       "Latin American", "East Asian",
+                                                       "Finnish", "Non-Finnish European",
+                                                       "Southeast Asian", "Other"))  ),
+                   mainPanel(
+                    actionButton("goButton", "Run Calculator"),
+                    br(),
+                    hr(),
+                    tags$head(
+                      tags$style(type="text/css", "tfoot {display:none;}")
+                    ),
+                    DT::DTOutput('result'),
+                    br(),
+                    wellPanel(h3('Click Below for Calculator and Author Contact Information'),p("[1] Jacquelyn Powers MS, Heather Wachtel MD, Erica Trujillo MS, Heena Desai MS, Ryan Hausler MS, Laura Conway MS, Bradley Wubbenhorst MS, Penn Medicine BioBank, Regeneron Genetics Center. Susan M. Domchek MD, Katherine L. Nathanson MD, Kara N. Maxwell MD PhD ",a('Multi-ethnic heterozygote frequencies of cancer susceptibility genes to inform counseling of reproductive risk ', href='https://www.gimjournal.org/article/S1098-3600(24)00180-1/fulltext'),". Genetics in Medicine Volume 27, Issue 1101246, January 2025")),
+                    wellPanel(h3('Disclaimer'),
+                              p("No Medical Advice. ALTHOUGH SOME CONTENT MAY BE PROVIDED BY INDIVIDUALS IN THE MEDICAL PROFESSION, YOU ACKNOWLEDGE THAT PROVISION OF SUCH CONTENT DOES NOT CREATE A MEDICAL PROFESSIONAL-PATIENT RELATIONSHIP AND DOES NOT CONSTITUTE AN OPINION, MEDICAL ADVICE, PROFESSIONAL DIAGNOSIS, SERVICE OR TREATMENT OF ANY CONDITION. Access to general information is provided for educational purposes only, through this site and links to other sites. Content is not recommended or endorsed by any doctor or healthcare provider. The information and Content provided are not substitutes for medical or professional care, and you should not use the information in place of a visit, call, consultation or the advice of your physician or other healthcare provider. You are liable or responsible for any advice, course of treatment, diagnosis or any other information, services or product obtained through this site.")),
+                    p(a("Homepage",
+                        href = "../", style = "font-family: 'Lato','Helvetica Neue',Helvetica,Arial,sans-serif;
+                      font-size: 15px;color: #2c3e50;font-weight: bold;text-align: center;text-decoration: underline;"), 
+                      " | ",
+                      a("Website Error Messages",
+                        href = "javascript:myFunction()",
+                        style = "font-family: 'Lato','Helvetica Neue',Helvetica,Arial,sans-serif;
+                      font-size: 15px;color: #2c3e50;font-weight: bold;text-align: center;text-decoration: underline;"), 
+                      " | ",
+                      a("Add to phone (iOS Safari)", href="https://support.apple.com/guide/iphone/bookmark-a-website-iph42ab2f3a7/ios#iph4f9a47bbc", style = "font-family: 'Lato','Helvetica Neue',Helvetica,Arial,sans-serif;
+                      font-size: 15px;color: #2c3e50;font-weight: bold;text-align: center;text-decoration: underline;"),
+                      " | ", 
+                      a("Add to phone (Android)", href="https://www.cnet.com/tech/mobile/adding-one-touch-bookmarks-to-your-androids-home-screen/", style = "font-family: 'Lato','Helvetica Neue',Helvetica,Arial,sans-serif;
+                      font-size: 15px;color: #2c3e50;font-weight: bold;text-align: center;text-decoration: underline;"),
+                      " | ",
+                      a("Source Code", 
+                        href = "https://github.com/ClevelandClinicQHS/riskcalc-website/tree/main/OvarianCancerPredictSurvivalAfterSurgforBulkyStageIIICCarc", 
+                        style = "font-family: 'Lato','Helvetica Neue',Helvetica,Arial,sans-serif;font-size: 15px;color: #2c3e50;font-weight: bold;text-align: center;text-decoration: underline;"
+                      ),
+                      style = "text-align: center;"),
+                    img(src='../logo-ccf.png', style = "max-width:30%; max-height:100%;"))))
+
+#################################################################
+
+# MAKE SERVER
+
+# Input data
+dat <- read_excel("/Users/David/Desktop/Maxwell/BRCA_carrier_repro_risk/ReproRiskPowers2024.xlsx", 
+                  sheet = "Data")
+
+diseases <- read_excel("/Users/David/Desktop/Maxwell/BRCA_carrier_repro_risk/ReproRiskPowers2024.xlsx", 
+                       sheet = "Dropdowns")
+
+# Convert class character to numeric
+row_names <- names(dat)[2:33]
+dat[row_names] <- sapply(dat[row_names], as.numeric)
+
+#############
+# Function to find partner probability of being a carrier based on ancestry
+  # Note: Don't round here --> round when outputting
+partner_risk <- function(gene_name, ancestry){
+  # Find the row in the database corresponding to the selected gene_name
+  r <- which(dat$Gene == gene_name)
+  
+  if (ancestry == "African"){
+    return( dat$`AFR Carrier Freq`[r]) }
+  else if (ancestry == "Ashkenazi Jewish"){
+    return( dat$`AJ Carrier Freq`[r])  }
+  else if (ancestry == "Latin American"){
+    return( dat$`AMR Carrier Freq`[r]) }
+  else if (ancestry == "East Asian"){
+    return( dat$`EAS Carrier Freq`[r]) }  
+  else if (ancestry == "Finnish"){
+    return( dat$`FIN Carrier Freq`[r]) }
+  else if (ancestry == "Non-Finnish European"){
+    return( dat$`NFE Carrier Freq`[r]) }
+  else if (ancestry == "Southeast Asian"){
+    return( dat$`SAS Carrier Freq`[r]) }
+  else if (ancestry == "Other"){
+    return( dat$`OTH Carrier Freq`[r]) }
+}
+
+#############
+
+server <- shinyServer(function(input, output){
+  data <- eventReactive(input$goButton, {
+    gene_name = input$gene_name
+    ancestry = input$ancestry
+    data <- data.frame(gene_name = gene_name,
+                       ancestry = ancestry)
+    data})
+  
+  
+  
+  
+  output$result <- renderDataTable({data = data()
+  
+  partner_risk_result <- partner_risk(data()$gene_name, data()$ancestry)
+  child_risk_result <- partner_risk_result*4
+  
+  if (is.na(partner_risk_result)){
+    app_partner_risk <- "No Data"
+    app_child_risk <- "No Data"}
+  
+  else{
+    app_partner_risk <- paste("1 in ", as.character(round(partner_risk_result)) )  
+    app_child_risk <- paste("1 in ", as.character(round(child_risk_result)) )}
+  
+  # Determine "Cancer Risk Syndrome in Heterozygote" & ...
+  #"Syndrome in Bi-allelic Individuals" based on gene_name
+  disease_row <- which(diseases$Gene == data()$gene_name)
+  heterozygote <- diseases$`Cancer Risk Syndrome in Heterozygote`[disease_row]
+  homozygote <- diseases$`Syndrome in Bi-allelic Individuals`[disease_row]
+  
+  # Data frame of outputted results
+  res = data.frame(Result = c("Cancer Risk Syndrome in Heterozygote", 
+                              "Risk that Partner 2 is Heterozygote in Same Gene",
+                              "Syndrome in Bi-allelic Individuals",
+                              "Risk of having a child with the bi-allelic syndrome if Partner 1 is a Heterozygote"), 
+                   Risk = c(heterozygote, app_partner_risk, homozygote, app_child_risk)
+                   )
+  
+  res}, options = list(
+    pageLength = 10,
+    lengthMenu = 0,
+    
+    searching = 0,
+    info = 0,
+    paging = 0,
+    initComplete = I(
+      "function(settings, json) {
+                    $(this.api().table().header()).css({'background-color': '#606060', 'color': '#fff'});
+            }")))
+})
+
+# Make the Calculator 
+shinyApp( ui = ui, server = server)
+
